@@ -39,7 +39,7 @@ public class GameBoard : MonoBehaviour {
       Vector3Int cell = current_state.WorldToCell(world_point);
       ToggleCell(cell, true);
     }
-    
+
     if (in_edit_mode && Mouse.current.rightButton.wasPressedThisFrame) {
       Vector3 world_point = Camera.main.ScreenToWorldPoint(Mouse.current.position.ReadValue());
       Vector3Int cell = current_state.WorldToCell(world_point);
@@ -90,6 +90,7 @@ public class GameBoard : MonoBehaviour {
     if (sim_coroutine != null) {
       StopCoroutine(sim_coroutine);
     }
+
     sim_coroutine = null;
     PauseMenu.is_paused = true;
   }
@@ -101,7 +102,7 @@ public class GameBoard : MonoBehaviour {
       StartSimulation();
     }
   }
-  
+
   public float GetUpdateInterval() {
     return update_interval;
   }
@@ -115,7 +116,7 @@ public class GameBoard : MonoBehaviour {
       for (int y = -center.y; y <= center.y; y++) {
         if (Random.value <= random_field_density) {
           Vector3Int cell = new Vector3Int(x, y, 0);
-          SetAlive(cell, true, Random.Range(0, 1) == 1);
+          SetAlive(cell, true, Random.Range(0, 2) == 1);
         }
       }
     }
@@ -142,33 +143,59 @@ public class GameBoard : MonoBehaviour {
       }
     }
 
+    var new_alive = new HashSet<Vector3Int>();
+
     foreach (Vector3Int cell in cells_to_check) {
       (int alive_neighbors_white, int alive_neighbors_red) = CountAliveNeighbors(cell);
+      int total_neighbors = alive_neighbors_white + alive_neighbors_red;
       bool currently_alive = IsAlive(cell);
-      bool is_white = current_state.GetTile(cell) == white_tile;
 
-      if (is_white && alive_neighbors_white < 2) {
-        next_state.SetTile(cell, null);
-        currently_alive = false;
-      }
-      if (!is_white && alive_neighbors_red < 2) {
-        next_state.SetTile(cell, null);
-        currently_alive = false;
-      }
-      
-      if (currently_alive) {
-        if (alive_neighbors_white + alive_neighbors_red >= 3) {
-          if (alive_neighbors_white > alive_neighbors_red) {
-            next_state.SetTile(cell, white_tile);
-          } else {
-            next_state.SetTile(cell, red_tile);
+      bool neighborsSingleColor = (alive_neighbors_white == 0 && alive_neighbors_red > 0) ||
+                                  (alive_neighbors_red == 0 && alive_neighbors_white > 0);
+      bool soleIsWhite = (alive_neighbors_white > 0 && alive_neighbors_red == 0);
+
+      if (neighborsSingleColor) {
+        if (currently_alive) {
+          if (total_neighbors == 2 || total_neighbors == 3) {
+            next_state.SetTile(cell, soleIsWhite ? white_tile : red_tile);
+            new_alive.Add(cell);
           }
-          continue;
         }
-        if (alive_neighbors_white + alive_neighbors_red < 2) {
-          next_state.SetTile(cell, null);
+        else {
+          if (total_neighbors == 3) {
+            next_state.SetTile(cell, soleIsWhite ? white_tile : red_tile);
+            new_alive.Add(cell);
+          }
         }
-        continue;
+      }
+      else {
+        if (currently_alive) {
+          bool is_white = current_state.GetTile(cell) == white_tile;
+          if (is_white) {
+            if (alive_neighbors_white == 2 || alive_neighbors_white == 3) {
+              next_state.SetTile(cell, white_tile);
+              new_alive.Add(cell);
+            }
+          }
+          else {
+            if (alive_neighbors_red == 2 || alive_neighbors_red == 3) {
+              next_state.SetTile(cell, red_tile);
+              new_alive.Add(cell);
+            }
+          }
+        }
+        else {
+          if (total_neighbors == 3) {
+            if (alive_neighbors_white > alive_neighbors_red) {
+              next_state.SetTile(cell, white_tile);
+            }
+            else {
+              next_state.SetTile(cell, red_tile);
+            }
+
+            new_alive.Add(cell);
+          }
+        }
       }
     }
 
@@ -176,6 +203,8 @@ public class GameBoard : MonoBehaviour {
     current_state = next_state;
     next_state = temp;
     next_state.ClearAllTiles();
+
+    alive_cells = new_alive;
   }
 
   private (int, int) CountAliveNeighbors(Vector3Int cell) {
@@ -189,7 +218,8 @@ public class GameBoard : MonoBehaviour {
         if (IsAlive(neighbor)) {
           if (current_state.GetTile(neighbor) == white_tile) {
             count_white++;
-          } else {
+          }
+          else {
             count_red++;
           }
         }
@@ -209,8 +239,9 @@ public class GameBoard : MonoBehaviour {
         current_state.SetTile(cell, white_tile);
       }
       else {
-        current_state.SetTile(cell, red_tile); 
+        current_state.SetTile(cell, red_tile);
       }
+
       alive_cells.Add(cell);
     }
     else {
